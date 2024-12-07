@@ -9,10 +9,20 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Tablo seçimi değiştiğinde
-    document.getElementById('tableSelect').addEventListener('change', function() {
-        const selectedTable = this.value;
-        if (selectedTable) {
-            loadTableFilters(selectedTable);
+    const tableSelect = document.getElementById('tableSelect');
+    tableSelect.addEventListener('change', async function() {
+        const selectedValue = this.value;
+        console.log('Seçilen tablo ID:', selectedValue);  // Seçilen değeri görelim
+        
+        if (selectedValue) {
+            try {
+                await loadTableFilters(selectedValue);
+            } catch (error) {
+                console.error('Filtreler yüklenirken hata:', error);
+                showError('Filtreler yüklenirken bir hata oluştu');
+            }
+        } else {
+            document.getElementById('filterContainer').innerHTML = '';
         }
     });
 });
@@ -22,6 +32,7 @@ async function loadTables() {
     try {
         const response = await fetch('/api/tablolar');
         const tables = await response.json();
+        console.log('Yüklenen tablolar:', tables); // Debug için
         
         const tableSelect = document.getElementById('tableSelect');
         tableSelect.innerHTML = '<option value="">Tablo Seçiniz</option>';
@@ -60,53 +71,72 @@ function showError(message) {
 // Filtreleri yükleme fonksiyonu
 async function loadTableFilters(tableName) {
     try {
-        const response = await fetch(`/api/${tableName}/kolonlar`);
-        const columns = await response.json();
+        console.log('loadTableFilters çağrıldı:', tableName);
         
-        // Önce benzersiz değerleri almak için her kolon için sorgu yapalım
         const filterContainer = document.getElementById('filterContainer');
-        filterContainer.innerHTML = ''; // Mevcut filtreleri temizle
+        filterContainer.innerHTML = '';
         
-        for (const column of columns) {
-            // id ve kisi_sayisi kolonlarını hariç tut
-            if (column !== 'id' && column !== 'kisi_sayisi') {
-                try {
-                    // Her kolon için benzersiz değerleri al
-                    const uniqueResponse = await fetch(`/api/${tableName}/unique-values/${column}`);
-                    const uniqueValues = await uniqueResponse.json();
-                    
-                    // Select elementi oluştur
-                    const div = document.createElement('div');
-                    div.className = 'mb-3';
-                    
-                    const select = document.createElement('select');
-                    select.className = 'form-select';
-                    select.name = column;
-                    
-                    // Label oluştur
-                    const label = document.createElement('label');
-                    label.className = 'form-label';
-                    label.textContent = column.replace(/_/g, ' ').toUpperCase();
-                    
-                    // Boş seçenek ekle
-                    select.innerHTML = `<option value="">Tümü</option>`;
-                    
-                    // Benzersiz değerleri seçeneklere ekle
-                    uniqueValues.forEach(value => {
-                        select.innerHTML += `<option value="${value}">${value}</option>`;
-                    });
-                    
-                    div.appendChild(label);
-                    div.appendChild(select);
-                    filterContainer.appendChild(div);
-                } catch (error) {
-                    console.error(`${column} için değerler yüklenirken hata:`, error);
-                }
-            }
+        // Tablo kolonlarını al
+        const kolonResponse = await fetch(`/api/${tableName}/kolonlar`);
+        const kolonlar = await kolonResponse.json();
+        
+        if (!Array.isArray(kolonlar)) {
+            throw new Error('Kolonlar alınamadı');
         }
+        
+        // Filtre container'ı oluştur
+        const filterRow = document.createElement('div');
+        filterRow.className = 'row g-3';
+        
+        // Her kolon için filtre oluştur
+        for (const kolonAdi of kolonlar) {
+            const col = document.createElement('div');
+            col.className = 'col-md-3';
+            
+            const formGroup = document.createElement('div');
+            formGroup.className = 'form-group';
+            
+            const label = document.createElement('label');
+            label.className = 'form-label';
+            label.textContent = kolonAdi.replace(/_/g, ' ').toUpperCase();
+            
+            const select = document.createElement('select');
+            select.className = 'form-select';
+            select.name = kolonAdi;
+            
+            // Varsayılan seçenek
+            select.innerHTML = '<option value="">Seçiniz</option>';
+            
+            // Filtre değerlerini yükle
+            try {
+                const response = await fetch(`/api/${tableName}/unique-values/${kolonAdi}`);
+                const values = await response.json();
+                
+                if (Array.isArray(values)) {
+                    values.forEach(value => {
+                        if (value !== null && value !== '') {
+                            const option = document.createElement('option');
+                            option.value = value;
+                            option.textContent = value;
+                            select.appendChild(option);
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error(`${kolonAdi} için değerler yüklenirken hata:`, error);
+            }
+            
+            formGroup.appendChild(label);
+            formGroup.appendChild(select);
+            col.appendChild(formGroup);
+            filterRow.appendChild(col);
+        }
+        
+        filterContainer.appendChild(filterRow);
+        
     } catch (error) {
         console.error('Filtreler yüklenirken hata:', error);
-        showError('Filtreler yüklenirken bir hata oluştu');
+        showError('Filtreler yüklenirken bir hata oluştu: ' + error.message);
     }
 }
 
@@ -149,6 +179,8 @@ async function performQuery() {
         showError('Sorgu yapılırken bir hata oluştu: ' + error.message);
     } finally {
         hideLoading();
+        // Butonu tekrar aktif hale getir
+        document.querySelector('button[type="submit"]').disabled = false;
     }
 }
 
