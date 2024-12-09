@@ -5,123 +5,149 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Suç Oranları Analiz Sistemi</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.0/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.20/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark">
-        <div class="container">
-            <a class="navbar-brand" href="/">Suç Oranları Analiz Sistemi</a>
-        </div>
-    </nav>
-
-    <div class="container mt-4">
-        <!-- Tablo Seçimi -->
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="mb-0">Veri Tablosu Seçimi</h5>
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <img src="{{ url_for('static', filename='images/sovas-logo.png') }}" alt="SOVAS Logo">
+            <div class="system-name">
+                Suç Oranları<br>
+                Veri Analiz Sistemi
             </div>
-            <div class="card-body">
-                <form id="queryForm">
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <select id="tableSelect" class="form-select" required>
-                                <option value="">Tablo Seçiniz</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <div id="filterContainer">
-                                <!-- Filtreler dinamik olarak buraya eklenecek -->
+        </div>
+        <div class="sidebar-menu">
+            <a href="#" class="active">
+                <i class="bi bi-house-door"></i>
+                <span>Ana Sayfa</span>
+            </a>
+            <a href="#">
+                <i class="bi bi-table"></i>
+                <span>Veri Analizi</span>
+            </a>
+            <a href="#">
+                <i class="bi bi-graph-up"></i>
+                <span>Grafikler</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Ana İçerik -->
+    <div class="main-content">
+        <!-- Üst Bar -->
+        <div class="top-bar">
+            <div class="toggle-sidebar">
+                <i class="bi bi-list"></i>
+            </div>
+            <div class="search-bar">
+                <i class="bi bi-search"></i>
+                <input type="text" placeholder="Ara...">
+            </div>
+        </div>
+
+        <!-- Ana Bölüm -->
+        <div class="content-wrapper">
+            <!-- Filtre Kartı -->
+            <div class="filter-card">
+                <div class="filter-header">
+                    <h5><i class="bi bi-funnel"></i> Veri Filtreleme</h5>
+                    <button class="btn btn-outline-secondary btn-sm" id="resetFilters">
+                        <i class="bi bi-arrow-counterclockwise"></i> Sıfırla
+                    </button>
+                </div>
+                <div class="filter-body">
+                    <form id="queryForm">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <select id="tableSelect" class="form-select select2" required>
+                                    <option value="">Tablo Seçiniz</option>
+                                </select>
+                            </div>
+                            <div class="col-md-8">
+                                <div id="filterContainer" class="filter-container">
+                                    <!-- Filtreler buraya dinamik olarak eklenecek -->
+                                </div>
                             </div>
                         </div>
-                        <div class="col-12">
-                            <button type="submit" class="btn btn-primary">Sorgula</button>
+                        <div class="filter-actions">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-search"></i> Sorgula
+                            </button>
+                            <button type="button" class="btn btn-outline-primary" id="advancedFilters">
+                                <i class="bi bi-sliders"></i> Gelişmiş Filtreler
+                            </button>
                         </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Sonuçlar Kartı -->
+            <div id="resultsCard" class="results-card" style="display: none;">
+                <div class="results-header">
+                    <h5><i class="bi bi-table"></i> Sorgu Sonuçları</h5>
+                    <div class="results-actions">
+                        <button class="btn btn-outline-primary btn-sm" id="exportExcel">
+                            <i class="bi bi-file-earmark-excel"></i> Excel
+                        </button>
+                        <button class="btn btn-outline-primary btn-sm" id="exportPDF">
+                            <i class="bi bi-file-earmark-pdf"></i> PDF
+                        </button>
+                        <button class="btn btn-outline-primary btn-sm" id="showChart">
+                            <i class="bi bi-bar-chart"></i> Grafik
+                        </button>
                     </div>
-                </form>
-            </div>
-        </div>
-
-        <!-- Sonuçlar için yeni bir card -->
-        <div id="resultsCard" class="card mb-4" style="display: none;">
-            <div class="card-header">
-                <h5 class="mb-0">Sorgu Sonuçları</h5>
-            </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-striped" id="resultsTable">
-                        <thead>
-                            <!-- Tablo başlıkları dinamik olarak eklenecek -->
-                        </thead>
-                        <tbody>
-                            <!-- Sonuçlar dinamik olarak eklenecek -->
-                        </tbody>
-                    </table>
                 </div>
-            </div>
-        </div>
-
-        <!-- Veri Görüntüleme -->
-        <div class="card mb-4" id="dataCard" style="display: none;">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">Veriler</h5>
-                <div class="btn-group">
-                    <button class="btn btn-outline-secondary" id="tableViewBtn">Tablo</button>
-                    <button class="btn btn-outline-secondary" id="chartViewBtn">Grafik</button>
-                </div>
-            </div>
-            <div class="card-body">
-                <!-- Tablo Görünümü -->
-                <div id="tableView">
+                <div class="results-body">
                     <div class="table-responsive">
-                        <table class="table table-striped" id="dataTable">
+                        <table class="table" id="resultsTable">
                             <thead>
                                 <!-- Tablo başlıkları dinamik olarak eklenecek -->
                             </thead>
                             <tbody>
-                                <!-- Veriler dinamik olarak eklenecek -->
+                                <!-- Sonuçlar dinamik olarak eklenecek -->
                             </tbody>
                         </table>
                     </div>
-                </div>
-
-                <!-- Grafik Görünümü -->
-                <div id="chartView" style="display: none;">
-                    <div class="row">
-                        <div class="col-md-6 mb-4">
-                            <canvas id="mainChart"></canvas>
-                        </div>
-                        <div class="col-md-6 mb-4">
-                            <canvas id="secondaryChart"></canvas>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Özet İstatistikler -->
-        <div class="card mb-4" id="statsCard" style="display: none;">
-            <div class="card-header">
-                <h5 class="mb-0">Özet İstatistikler</h5>
-            </div>
-            <div class="card-body">
-                <div class="row" id="statsContent">
-                    <!-- İstatistikler dinamik olarak eklenecek -->
                 </div>
             </div>
         </div>
     </div>
 
-    <footer class="footer mt-auto py-3">
-        <div class="container text-center">
-            <p class="mb-0">&copy; 2024 Suç Oranları Analiz Sistemi</p>
+    <!-- Grafik Modalı -->
+    <div class="modal fade" id="chartModal" tabindex="-1" aria-labelledby="chartModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="chartModalLabel">Veri Grafiği</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <select class="form-select" id="chartType">
+                            <option value="bar">Çubuk Grafik</option>
+                            <option value="pie">Pasta Grafik</option>
+                            <option value="line">Çizgi Grafik</option>
+                        </select>
+                    </div>
+                    <div class="chart-container" style="position: relative; height:50vh;">
+                        <canvas id="dataChart"></canvas>
+                    </div>
+                </div>
+            </div>
         </div>
-    </footer>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-    <script>
-        Chart.defaults.locale = 'tr';
-    </script>
 </body>
 </html> 
