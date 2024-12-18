@@ -1,52 +1,66 @@
 document.addEventListener('DOMContentLoaded', function() {
+    // Gerekli elementleri seç
+    const tableSelect = document.getElementById('tableSelect');
+    const showFiltersBtn = document.getElementById('showFilters');
+    const filterSection = document.getElementById('filterSection');
+    
+    // Select2'yi initialize et
+    $(tableSelect).select2({
+        placeholder: 'Tablo Seçiniz',
+        allowClear: true,
+        width: '100%',
+        language: {
+            noResults: function() {
+                return "Sonuç bulunamadı";
+            }
+        }
+    });
+
     // Tabloları yükle
     loadTables();
+    
+    // Tablo seçimi değiştiğinde
+    $(tableSelect).on('change', function() {
+        const selectedValue = this.value;
+        console.log('Seçilen tablo:', selectedValue);
+        
+        // Filtre butonunu aktifleştir/deaktifleştir
+        showFiltersBtn.disabled = !selectedValue;
+        
+        // Eğer seçim kaldırıldıysa filtreleri gizle
+        if (!selectedValue) {
+            filterSection.style.display = 'none';
+            document.getElementById('filterContainer').innerHTML = '';
+        }
+    });
+    
+    // Filtreleri göster butonu tıklandığında
+    showFiltersBtn.addEventListener('click', async function() {
+        const selectedTable = tableSelect.value;
+        
+        if (selectedTable) {
+            try {
+                // Filtreleri yükle
+                await loadTableFilters(selectedTable);
+                
+                // Filtre bölümünü göster
+                filterSection.style.display = 'block';
+                
+                // Smooth scroll to filters
+                filterSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } catch (error) {
+                console.error('Filtreler yüklenirken hata:', error);
+                showError('Filtreler yüklenirken bir hata oluştu');
+            }
+        }
+    });
     
     // Form submit olayını dinle
     document.getElementById('queryForm').addEventListener('submit', function(e) {
         e.preventDefault();
         performQuery();
     });
-    
-    // Tablo seçimi değiştiğinde
-    const tableSelect = document.getElementById('tableSelect');
-    tableSelect.addEventListener('change', async function() {
-        const selectedValue = this.value;
-        console.log('Seçilen tablo ID:', selectedValue);  // Seçilen değeri görelim
-        
-        if (selectedValue) {
-            try {
-                await loadTableFilters(selectedValue);
-            } catch (error) {
-                console.error('Filtreler yüklenirken hata:', error);
-                showError('Filtreler yüklenirken bir hata oluştu');
-            }
-        } else {
-            document.getElementById('filterContainer').innerHTML = '';
-        }
-    });
-    
-    // Sıfırlama butonu için event listener ekle
-    document.getElementById('resetFilters').addEventListener('click', function() {
-        // Tablo seçimini sıfırla
-        const tableSelect = document.getElementById('tableSelect');
-        tableSelect.value = '';
-        
-        // Select2'yi güncelle
-        if ($(tableSelect).data('select2')) {
-            $(tableSelect).val('').trigger('change');
-        }
-        
-        // Filtre container'ı temizle
-        document.getElementById('filterContainer').innerHTML = '';
-        
-        // Sonuçlar kartını gizle
-        document.getElementById('resultsCard').style.display = 'none';
-        
-        // Başarı mesajını göster
-        showSuccess('Filtreler başarıyla sıfırlandı');
-    });
-    
+
     // Excel dışa aktarma butonu
     document.getElementById('exportExcel').addEventListener('click', exportToExcel);
     
@@ -59,6 +73,48 @@ document.addEventListener('DOMContentLoaded', function() {
     // Grafik tipi değiştiğinde
     document.getElementById('chartType').addEventListener('change', function() {
         updateChart(this.value);
+    });
+
+    // Sıfırlama butonu için event listener
+    document.getElementById('resetFilters').addEventListener('click', function() {
+        // Tablo seçimini sıfırla
+        const tableSelect = document.getElementById('tableSelect');
+        tableSelect.value = '';
+        
+        // Select2'yi güncelle
+        $(tableSelect).val('').trigger('change');
+        
+        // Filtre bölümünü gizle
+        const filterSection = document.getElementById('filterSection');
+        filterSection.style.display = 'none';
+        
+        // Filtre container'ı temizle
+        document.getElementById('filterContainer').innerHTML = '';
+        
+        // Sonuçlar kartını gizle
+        document.getElementById('resultsCard').style.display = 'none';
+        
+        // Varsa alert'i kaldır
+        const oldAlert = document.querySelector('.alert');
+        if (oldAlert) {
+            oldAlert.remove();
+        }
+        
+        // Başarı mesajını göster
+        showSuccess('Filtreler başarıyla sıfırlandı');
+        
+        // Filtre butonunu deaktif et
+        document.getElementById('showFilters').disabled = true;
+    });
+
+    // Sidebar toggle fonksiyonu
+    const toggleButton = document.querySelector('.toggle-sidebar');
+    const sidebar = document.querySelector('.sidebar');
+    const mainContent = document.querySelector('.main-content');
+    
+    toggleButton.addEventListener('click', function() {
+        sidebar.classList.toggle('collapsed');
+        mainContent.classList.toggle('expanded');
     });
 });
 
@@ -221,7 +277,7 @@ async function loadTables() {
     try {
         const response = await fetch('/api/tablolar');
         const tables = await response.json();
-        console.log('Yüklenen tablolar:', tables); // Debug için
+        console.log('Yüklenen tablolar:', tables);
         
         const tableSelect = document.getElementById('tableSelect');
         tableSelect.innerHTML = '<option value="">Tablo Seçiniz</option>';
@@ -232,6 +288,10 @@ async function loadTables() {
             option.textContent = table.ad;
             tableSelect.appendChild(option);
         });
+
+        // Select2'yi güncelle
+        $(tableSelect).trigger('change');
+        
     } catch (error) {
         console.error('Tablolar yüklenirken hata:', error);
         showError('Tablolar yüklenirken bir hata oluştu');
@@ -257,11 +317,9 @@ function showError(message) {
     document.querySelector('.container').prepend(alertDiv);
 }
 
-// Filtreleri yükleme fonksiyonu
+// Filtreleri yükleme fonksiyonu güncellendi
 async function loadTableFilters(tableName) {
     try {
-        console.log('loadTableFilters çağrıldı:', tableName);
-        
         const filterContainer = document.getElementById('filterContainer');
         filterContainer.innerHTML = '';
         
@@ -269,39 +327,69 @@ async function loadTableFilters(tableName) {
         const kolonResponse = await fetch(`/api/${tableName}/kolonlar`);
         const kolonlar = await kolonResponse.json();
         
-        if (!Array.isArray(kolonlar)) {
-            throw new Error('Kolonlar alınamadı');
-        }
-        
-        // Filtre container'ı oluştur
-        const filterRow = document.createElement('div');
-        filterRow.className = 'row g-3';
+        console.log('Alınan kolonlar:', kolonlar);
         
         // Her kolon için filtre oluştur
         for (const kolonAdi of kolonlar) {
-            const col = document.createElement('div');
-            col.className = 'col-md-3';
-            
             const formGroup = document.createElement('div');
             formGroup.className = 'form-group';
             
             const label = document.createElement('label');
             label.className = 'form-label';
-            label.textContent = kolonAdi.replace(/_/g, ' ').toUpperCase();
+            label.textContent = kolonAdi;
             
             const select = document.createElement('select');
             select.className = 'form-select';
-            select.name = kolonAdi;
             
-            // Varsayılan seçenek
-            select.innerHTML = '<option value="">Seçiniz</option>';
+            // Kolon adını API için hazırla
+            let columnName;
+            const columnMappings = {
+                'Yaş': 'yas',
+                'Yıl': 'yil',
+                'Ceza Türü': 'ceza_turu',
+                'Suç Türü': 'suc_turu',
+                'Eğitim Durumu': 'egitim_durumu',
+                'İş Durumu': 'is_durumu',
+                'Medeni Durum': 'medeni_durum',
+                'İnfaza Davet Şekli': 'infaza_davet_sekli',
+                'Yerleşim Yeri': 'yerlesim_yeri',
+                'Yerleşim Yeri (Ülke)': 'yerlesim_yeri_ulke',
+                'Cinsiyet': 'cinsiyet',
+                'İl': 'il',
+                'Uyruk': 'uyruk'
+            };
+
+            columnName = columnMappings[kolonAdi] || kolonAdi
+                .toLowerCase()
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .replace(/\s+/g, '_');
+
+            console.log(`Kolon adı dönüşümü: ${kolonAdi} -> ${columnName}`);
             
-            // Filtre değerlerini yükle
+            select.name = columnName;
+            select.id = `filter_${columnName}`;
+            select.innerHTML = '<option value="">Tümü</option>';
+            
+            console.log(`${kolonAdi} için API çağrısı:`, `/api/${tableName}/unique-values/${columnName}`);
+            
             try {
-                const response = await fetch(`/api/${tableName}/unique-values/${kolonAdi}`);
+                const response = await fetch(`/api/${tableName}/unique-values/${columnName}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 const values = await response.json();
+                console.log(`${kolonAdi} için değerler:`, values);
                 
                 if (Array.isArray(values)) {
+                    // Sayısal değerler için özel sıralama
+                    values.sort((a, b) => {
+                        if (columnName === 'yil' || columnName === 'yas') {
+                            return Number(a) - Number(b);
+                        }
+                        return String(a).localeCompare(String(b), 'tr');
+                    });
+                    
                     values.forEach(value => {
                         if (value !== null && value !== '') {
                             const option = document.createElement('option');
@@ -317,21 +405,29 @@ async function loadTableFilters(tableName) {
             
             formGroup.appendChild(label);
             formGroup.appendChild(select);
-            col.appendChild(formGroup);
-            filterRow.appendChild(col);
+            filterContainer.appendChild(formGroup);
+            
+            // Her select için Select2'yi initialize et
+            $(select).select2({
+                placeholder: 'Seçiniz',
+                allowClear: true,
+                width: '100%',
+                language: {
+                    noResults: function() {
+                        return "Sonuç bulunamadı";
+                    }
+                }
+            });
         }
-        
-        filterContainer.appendChild(filterRow);
         
     } catch (error) {
         console.error('Filtreler yüklenirken hata:', error);
-        showError('Filtreler yüklenirken bir hata oluştu: ' + error.message);
+        throw error;
     }
 }
 
 // Sorgu yapma fonksiyonu
 async function performQuery() {
-    showLoading();
     try {
         const tableName = document.getElementById('tableSelect').value;
         if (!tableName) {
@@ -350,6 +446,8 @@ async function performQuery() {
         
         // Filtreleri query string'e dönüştür
         const queryString = new URLSearchParams(filters).toString();
+        console.log('Filtreler:', filters);  // Debug için
+        
         const response = await fetch(`/api/${tableName}/veriler?${queryString}`);
         const result = await response.json();
         
@@ -359,6 +457,7 @@ async function performQuery() {
         
         if (result.data && result.data.length > 0) {
             displayResults(result);
+            document.getElementById('resultsCard').style.display = 'block';
         } else {
             showError('Seçilen kriterlere uygun sonuç bulunamadı');
         }
@@ -366,10 +465,6 @@ async function performQuery() {
     } catch (error) {
         console.error('Sorgu hatası:', error);
         showError('Sorgu yapılırken bir hata oluştu: ' + error.message);
-    } finally {
-        hideLoading();
-        // Butonu tekrar aktif hale getir
-        document.querySelector('button[type="submit"]').disabled = false;
     }
 }
 
@@ -381,13 +476,43 @@ function displayResults(data) {
     const tbody = table.querySelector('tbody');
     
     if (data.data && data.data.length > 0) {
+        // Sonuç sayısını göster
+        showSuccess(`${data.data.length} adet sonuç bulundu`);
+        
         // Kişi sayısını en sona al
         const headers = Object.keys(data.data[0]).filter(h => h !== 'kisi_sayisi');
-        headers.push('kisi_sayisi'); // Kişi sayısını en sona ekle
+        headers.push('kisi_sayisi');
+        
+        // Başlık dönüşüm haritası
+        const headerMappings = {
+            'id': 'ID',
+            'suc_turu': 'SUÇ TÜRÜ',
+            'suc_turu_id': 'SUÇ TÜRÜ ID',
+            'ceza_turu': 'CEZA TÜRÜ',
+            'ceza_turu_id': 'CEZA TÜRÜ ID',
+            'cinsiyet': 'CİNSİYET',
+            'yil': 'YIL',
+            'il': 'İL',
+            'il_id': 'İL ID',
+            'yas': 'YAŞ',
+            'egitim_durumu': 'EĞİTİM DURUMU',
+            'egitim_durumu_id': 'EĞİTİM DURUMU ID',
+            'is_durumu': 'İŞ DURUMU',
+            'is_durumu_id': 'İŞ DURUMU ID',
+            'medeni_durum': 'MEDENİ DURUM',
+            'medeni_durum_id': 'MEDENİ DURUM ID',
+            'infaza_davet_sekli': 'İNFAZA DAVET ŞEKLİ',
+            'infaza_davet_id': 'İNFAZA DAVET ID',
+            'yerlesim_yeri': 'YERLEŞİM YERİ',
+            'yerlesim_yeri_id': 'YERLEŞİM YERİ ID',
+            'yerlesim_yeri_ulke': 'YERLEŞİM YERİ (ÜLKE)',
+            'uyruk': 'UYRUK',
+            'kisi_sayisi': 'KİŞİ SAYISI'
+        };
         
         thead.innerHTML = `
             <tr>
-                ${headers.map(header => `<th>${header.replace(/_/g, ' ').toUpperCase()}</th>`).join('')}
+                ${headers.map(header => `<th>${headerMappings[header] || header.toUpperCase()}</th>`).join('')}
             </tr>
         `;
         
@@ -404,6 +529,7 @@ function displayResults(data) {
         resultsCard.style.display = 'block';
     } else {
         tbody.innerHTML = '<tr><td colspan="100%">Sonuç bulunamadı</td></tr>';
+        showError('Seçilen kriterlere uygun sonuç bulunamadı');
     }
 }
 
@@ -421,7 +547,6 @@ function showSuccess(message) {
     alertDiv.className = 'alert alert-success alert-dismissible fade show mt-3';
     alertDiv.role = 'alert';
     alertDiv.innerHTML = `
-        <i class="bi bi-check-circle-fill me-2"></i>
         ${message}
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     `;
@@ -432,13 +557,8 @@ function showSuccess(message) {
         oldAlert.remove();
     }
     
-    // Yeni alert'i ekle
-    document.querySelector('.filter-card').insertAdjacentElement('afterend', alertDiv);
-    
-    // 3 saniye sonra alert'i otomatik kaldır
-    setTimeout(() => {
-        alertDiv.remove();
-    }, 3000);
+    // Alert'i sayfaya ekle
+    document.querySelector('.content-wrapper').insertBefore(alertDiv, document.getElementById('resultsCard'));
 }
 
 // Excel'e aktarma fonksiyonu
@@ -483,8 +603,14 @@ function exportToPDF() {
             return;
         }
 
-        // Başlıkları al
-        const headers = Array.from(table.querySelectorAll('thead th')).map(th => th.textContent);
+        // Başlıkları al ve Türkçe karakterleri düzelt
+        const headers = Array.from(table.querySelectorAll('thead th')).map(th => {
+            return th.textContent
+                .replace('KISI_SAYISI', 'KİŞİ SAYISI')
+                .replace('YIL', 'YIL')
+                .replace('IL', 'İL')
+                .replace('_', ' ');
+        });
         
         // Verileri al
         const rows = Array.from(table.querySelectorAll('tbody tr')).map(row => {
@@ -492,25 +618,28 @@ function exportToPDF() {
         });
 
         // PDF oluştur
-        const doc = new jspdf.jsPDF();
+        const doc = new jspdf.jsPDF('l', 'pt'); // Yatay (landscape) format
         
         // Başlık ekle
         doc.setFontSize(16);
-        doc.text('Suç Analiz Raporu', 14, 15);
+        doc.text('Suç Analiz Raporu', 40, 40);
+        
+        // Tarih ekle
         doc.setFontSize(10);
-        doc.text(`Oluşturulma Tarihi: ${new Date().toLocaleDateString('tr-TR')}`, 14, 22);
+        doc.text(`Oluşturulma Tarihi: ${new Date().toLocaleDateString('tr-TR')}`, 40, 60);
 
         // Tabloyu ekle
         doc.autoTable({
             head: [headers],
             body: rows,
-            startY: 30,
+            startY: 70,
             theme: 'grid',
             styles: {
                 fontSize: 8,
                 cellPadding: 2,
                 overflow: 'linebreak',
-                halign: 'center'
+                halign: 'center',
+                font: 'helvetica'
             },
             headStyles: {
                 fillColor: [57, 73, 171],
@@ -521,6 +650,16 @@ function exportToPDF() {
             },
             alternateRowStyles: {
                 fillColor: [245, 245, 245]
+            },
+            margin: { top: 70, right: 30, bottom: 30, left: 30 },
+            didDrawPage: function(data) {
+                // Sayfa numarası ekle
+                doc.setFontSize(8);
+                doc.text(
+                    'Sayfa ' + data.pageNumber,
+                    data.settings.margin.left,
+                    doc.internal.pageSize.height - 20
+                );
             }
         });
 
@@ -533,4 +672,32 @@ function exportToPDF() {
         console.error('PDF dışa aktarma hatası:', error);
         showError('PDF dışa aktarma işlemi başarısız oldu');
     }
+}
+
+// Select2 inicializasyonu
+$(document).ready(function() {
+    $('#tableSelect').select2({
+        placeholder: 'Tablo Seçiniz',
+        allowClear: true,
+        width: '100%',
+        language: {
+            noResults: function() {
+                return "Sonuç bulunamadı";
+            }
+        }
+    });
+});
+
+// Filtre select'leri için select2
+function initializeFilterSelects() {
+    $('.form-select').select2({
+        placeholder: 'Seçiniz',
+        allowClear: true,
+        width: '100%',
+        language: {
+            noResults: function() {
+                return "Sonuç bulunamadı";
+            }
+        }
+    });
 } 

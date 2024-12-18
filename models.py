@@ -8,7 +8,7 @@ class CezaTuru(db.Model):
     ceza_turu_id = db.Column(db.Integer)
     ceza_turu = db.Column(db.String)
     cinsiyet = db.Column(db.String)
-    yıl = db.Column(db.Integer)
+    yil = db.Column('yil', db.Integer)
     kisi_sayisi = db.Column(db.Integer)
 
 class EgitimDurumu(db.Model):
@@ -21,7 +21,7 @@ class EgitimDurumu(db.Model):
     cinsiyet = db.Column(db.String)
     il = db.Column(db.String)
     il_id = db.Column(db.Integer)
-    yil = db.Column(db.Integer)
+    yil = db.Column('yil', db.Integer)
     kisi_sayisi = db.Column(db.Integer)
 
 class IlKisiSayisi(db.Model):
@@ -29,7 +29,7 @@ class IlKisiSayisi(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     il = db.Column(db.String)
     il_id = db.Column(db.Integer)
-    yil = db.Column(db.Integer)
+    yil = db.Column('yil', db.Integer)
     kisi_sayisi = db.Column(db.Integer)
 
 class InfazDavet(db.Model):
@@ -40,7 +40,7 @@ class InfazDavet(db.Model):
     infaza_davet_id = db.Column(db.Integer)
     infaza_davet_sekli = db.Column(db.String)
     cinsiyet = db.Column(db.String)
-    yil = db.Column(db.Integer)
+    yil = db.Column('yil', db.Integer)
     kisi_sayisi = db.Column(db.Integer)
 
 class IsDurumu(db.Model):
@@ -54,7 +54,7 @@ class IsDurumu(db.Model):
     il = db.Column(db.String)
     il_id = db.Column(db.Integer)
     kisi_sayisi = db.Column(db.Integer)
-    yil = db.Column(db.Integer)
+    yil = db.Column('yil', db.Integer)
 
 class MedeniDurum(db.Model):
     __tablename__ = 'medeni_durum'
@@ -75,7 +75,7 @@ class SucTuruGenel(db.Model):
     suc_turu = db.Column(db.String)
     il = db.Column(db.String)
     il_id = db.Column(db.Integer)
-    yil = db.Column(db.Integer)
+    yil = db.Column('yil', db.Integer)
     kisi_sayisi = db.Column(db.Integer)
 
 class UyrukCinsiyet(db.Model):
@@ -85,7 +85,7 @@ class UyrukCinsiyet(db.Model):
     cinsiyet = db.Column(db.String)
     il = db.Column(db.String)
     il_id = db.Column(db.Integer)
-    yil = db.Column(db.Integer)
+    yil = db.Column('yil', db.Integer)
     kisi_sayisi = db.Column(db.Integer)
 
 class Yas(db.Model):
@@ -94,7 +94,7 @@ class Yas(db.Model):
     cinsiyet = db.Column(db.String)
     il = db.Column(db.String)
     il_id = db.Column(db.Integer)
-    yil = db.Column(db.Integer)
+    yil = db.Column('yil', db.Integer)
     kisi_sayisi = db.Column(db.Integer)
 
 class YerlesimYeri(db.Model):
@@ -104,5 +104,5 @@ class YerlesimYeri(db.Model):
     cinsiyet = db.Column(db.String)
     yerlesim_yeri = db.Column(db.String)
     yerlesim_yeri_id = db.Column(db.Integer)
-    yil = db.Column(db.Integer)
+    yil = db.Column('yil', db.Integer)
     kisi_sayisi = db.Column(db.Integer)

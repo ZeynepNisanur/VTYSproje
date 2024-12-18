@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Veri Analizi - SOVAS</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.0/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .dashboard-charts {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .chart-card {
+            background: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            padding: 1.5rem;
+            height: 400px; /* Sabit yükseklik */
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chart-header {
+            margin-bottom: 1rem;
+        }
+
+        .chart-header h5 {
+            margin: 0;
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+
+        .chart-body {
+            flex: 1;
+            position: relative;
+            min-height: 300px; /* Minimum yükseklik */
+        }
+
+        .chart-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+        }
+
+        /* Responsive düzen */
+        @media (max-width: 1200px) {
+            .dashboard-charts {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Dashboard özet kartları */
+        .dashboard-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .summary-card {
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 1.5rem;
+            box-shadow: var(--box-shadow);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .summary-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.5rem;
+        }
+
+        .summary-content h3 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .summary-content p {
+            margin: 0;
+            color: #666;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <img src="{{ url_for('static', filename='images/sovas-logo.png') }}" alt="SOVAS Logo">
+            <div class="system-name">
+                Suç Oranları<br>
+                Veri Analiz Sistemi
+            </div>
+        </div>
+        <div class="sidebar-menu">
+            <a href="/">
+                <i class="bi bi-house-door"></i>
+                <span>Ana Sayfa</span>
+            </a>
+            <a href="/veri-analizi" class="active">
+                <i class="bi bi-table"></i>
+                <span>Veri Analizi</span>
+            </a>
+            <a href="#">
+                <i class="bi bi-graph-up"></i>
+                <span>Grafikler</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Ana İçerik -->
+    <div class="main-content">
+        <!-- Üst Bar -->
+        <div class="top-bar">
+            <div class="toggle-sidebar">
+                <i class="bi bi-list"></i>
+            </div>
+            <div class="page-title">
+                <h4><i class="bi bi-table"></i> Veri Analizi</h4>
+            </div>
+        </div>
+
+        <!-- Dashboard İçeriği -->
+        <div class="content-wrapper">
+            <!-- Özet Kartları -->
+            <div class="dashboard-summary">
+                <div class="summary-card">
+                    <div class="summary-icon" style="background: var(--accent-color)">
+                        <i class="bi bi-people"></i>
+                    </div>
+                    <div class="summary-content">
+                        <h3 id="totalPeople">0</h3>
+                        <p>Toplam Kişi Sayısı</p>
+                    </div>
+                </div>
+                
+                <div class="summary-card">
+                    <div class="summary-icon" style="background: var(--success-color)">
+                        <i class="bi bi-geo-alt"></i>
+                    </div>
+                    <div class="summary-content">
+                        <h3 id="totalCities">0</h3>
+                        <p>Toplam İl Sayısı</p>
+                    </div>
+                </div>
+                
+                <div class="summary-card">
+                    <div class="summary-icon" style="background: var(--warning-color)">
+                        <i class="bi bi-calendar3"></i>
+                    </div>
+                    <div class="summary-content">
+                        <h3 id="yearRange">-</h3>
+                        <p>Veri Yıl Aralığı</p>
+                    </div>
+                </div>
+                
+                <div class="summary-card">
+                    <div class="summary-icon" style="background: var(--primary-color)">
+                        <i class="bi bi-table"></i>
+                    </div>
+                    <div class="summary-content">
+                        <h3 id="totalCategories">0</h3>
+                        <p>Toplam Suç Kategorisi</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grafikler -->
+            <div class="dashboard-charts">
+                <!-- Yıllara Göre Dağılım -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h5>Yıllara Göre Dağılım</h5>
+                    </div>
+                    <div class="chart-body">
+                        <div class="chart-container">
+                            <canvas id="yearlyChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- İllere Göre Dağılım -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h5>İllere Göre Dağılım (İlk 10)</h5>
+                    </div>
+                    <div class="chart-body">
+                        <div class="chart-container">
+                            <canvas id="citiesChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cinsiyet Dağılımı -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h5>Cinsiyet Dağılımı</h5>
+                    </div>
+                    <div class="chart-body">
+                        <div class="chart-container">
+                            <canvas id="genderChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Eğitim Durumu Dağılımı -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h5>Eğitim Durumu Dağılımı</h5>
+                    </div>
+                    <div class="chart-body">
+                        <div class="chart-container">
+                            <canvas id="educationChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html> 

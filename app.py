@@ -1,10 +1,10 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from models import db, SucTuruGenel, CezaTuru, EgitimDurumu, IlKisiSayisi, InfazDavet, IsDurumu, MedeniDurum, UyrukCinsiyet, YerlesimYeri, Yas
 import traceback
 from flask_migrate import Migrate
-from sqlalchemy import func, text
+from sqlalchemy import func, text, distinct
 from config import Config
 from math import ceil  # get_paginated_data fonksiyonu için gerekli
 
@@ -80,9 +80,9 @@ def get_paginated_data(model, page=1, per_page=10, **filters):
 
 # Örnek endpoint - sayfalı veri çekme
 @app.route('/api/<tablo>/veriler')
-def get_tablo_verileri(tablo):
-    """Seçilen tablonun verilerini döndürür"""
+def get_filtered_data(tablo):
     try:
+        # Model haritası
         model_map = {
             'ceza_turu': CezaTuru,
             'egitim_durumu': EgitimDurumu,
@@ -98,54 +98,47 @@ def get_tablo_verileri(tablo):
         
         model = model_map.get(tablo)
         if not model:
-            return jsonify({'error': 'Geçersiz tablo adı'}), 400
-
-        # Sorgu oluştur
+            return jsonify({'success': False, 'error': 'Geçersiz tablo adı'}), 400
+            
+        # Base query
         query = db.session.query(model)
-
-        # Filtreleri uygula
-        for key, value in request.args.items():
-            if value and hasattr(model, key) and key != 'kisi_sayisi':
-                query = query.filter(getattr(model, key) == value)
-
-        # Gruplandırma için kullanılacak sütunları belirle
-        group_columns = [column.name for column in model.__table__.columns 
-                        if column.name not in ['id', 'kisi_sayisi']]
         
-        # Sorguyu gruplandır ve kisi_sayisi toplamını al
-        query = db.session.query(
-            *[getattr(model, col) for col in group_columns],
-            func.sum(model.kisi_sayisi).label('kisi_sayisi')
-        ).filter(*[getattr(model, key) == value for key, value in request.args.items() if value and hasattr(model, key) and key != 'kisi_sayisi']) \
-         .group_by(*[getattr(model, col) for col in group_columns])
-
+        # URL'den gelen tüm filtreleri uygula
+        for key, value in request.args.items():
+            if value and hasattr(model, key):
+                query = query.filter(getattr(model, key) == value)
+        
+        # Sonuçları al
         results = query.all()
-
-        # Sonuçları JSON formatına dönüştür
+        
+        # Sonuçları JSON'a dönüştür
         data = []
-        for item in results:
-            row = {}
-            for i, col in enumerate(group_columns):
-                row[col] = getattr(item, col)
-            row['kisi_sayisi'] = int(item.kisi_sayisi)  # Decimal'i int'e çevir
-            data.append(row)
-
-        # Sonuçları sırala (örneğin yıla göre)
-        if 'yıl' in group_columns:
-            data.sort(key=lambda x: x['yıl'])
-
+        for row in results:
+            item = {}
+            for column in row.__table__.columns:
+                value = getattr(row, column.name)
+                # Integer değerleri düzgün formatla
+                if isinstance(value, int):
+                    item[column.name] = int(value)
+                else:
+                    item[column.name] = value
+            data.append(item)
+        
+        print(f"Filtreler: {request.args}")
+        print(f"Bulunan sonuç sayısı: {len(data)}")
+        
         return jsonify({
             'success': True,
             'data': data,
             'total': len(data)
         })
-
+        
     except Exception as e:
-        print(f"Sorgu hatası: {str(e)}")
+        print(f"Veri getirme hatası: {str(e)}")
         traceback.print_exc()
         return jsonify({
             'success': False,
-            'error': f'Sorgu yapılırken bir hata oluştu: {str(e)}'
+            'error': f'Veriler getirilirken bir hata oluştu: {str(e)}'
         }), 500
 
 # Diğer route'lar buraya gelecek...
@@ -170,23 +163,41 @@ def get_tablolar():
             {'id': 'infaza_davet_sekli', 'ad': 'İnfaza Davet Şekli'},
             {'id': 'is_durumu', 'ad': 'İş Durumu'},
             {'id': 'medeni_durum', 'ad': 'Medeni Durum'},
-            {'id': 'suc_turu_genel', 'ad': 'Suç Türü Genel'},
+            {'id': 'suc_turu_genel', 'ad': 'Suç Türü'},
             {'id': 'uyruk_ve_cinsiyet', 'ad': 'Uyruk ve Cinsiyet'},
             {'id': 'yas', 'ad': 'Yaş'},
             {'id': 'yerlesim_yeri', 'ad': 'Yerleşim Yeri'}
         ]
-        print("Gönderilen tablolar:", tablolar)  # Debug için
         return jsonify(tablolar)
     except Exception as e:
         print(f"Hata: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+def format_column_name(column_name):
+    """Kolon isimlerini düzgün formata çevirir"""
+    replacements = {
+        'suc_turu': 'Suç Türü',
+        'egitim_durumu': 'Eğitim Durumu',
+        'cinsiyet': 'Cinsiyet',
+        'il': 'İl',
+        'yil': 'Yıl',
+        'yas': 'Yaş',
+        'infaza_davet_sekli': 'İnfaza Davet Şekli',
+        'is_durumu': 'İş Durumu',
+        'medeni_durum': 'Medeni Durum',
+        'yerlesim_yeri': 'Yerleşim Yeri',
+        'yerlesim_yeri_ulke': 'Yerleşim Yeri (Ülke)',
+        'uyruk': 'Uyruk',
+        'ceza_turu': 'Ceza Türü'
+    }
+    return replacements.get(column_name, column_name.replace('_', ' ').title())
 
 @app.route('/api/<tablo>/kolonlar')
 def get_tablo_kolonlari(tablo):
     """Seçilen tablonun filtrelenebilir kolonlarını döndürür"""
     try:
         kolon_map = {
-            'ceza_turu': ['ceza_turu', 'cinsiyet', 'yıl'],
+            'ceza_turu': ['ceza_turu', 'cinsiyet', 'yil'],
             'egitim_durumu': ['suc_turu', 'egitim_durumu', 'cinsiyet', 'il', 'yil'],
             'il_kisi_sayisi': ['il', 'yil'],
             'infaza_davet_sekli': ['suc_turu', 'infaza_davet_sekli', 'cinsiyet', 'yil'],
@@ -198,15 +209,27 @@ def get_tablo_kolonlari(tablo):
             'yerlesim_yeri': ['yerlesim_yeri_ulke', 'cinsiyet', 'yerlesim_yeri', 'yil']
         }
         
-        return jsonify(kolon_map.get(tablo, []))
+        kolonlar = kolon_map.get(tablo, [])
+        formatted_kolonlar = []
+        for kolon in kolonlar:
+            if kolon == 'yil':
+                formatted_kolonlar.append('Yıl')
+            elif kolon == 'ceza_turu':
+                formatted_kolonlar.append('Ceza Türü')
+            else:
+                formatted_kolonlar.append(format_column_name(kolon))
+        
+        print(f"Tablo: {tablo}, Kolonlar: {kolonlar}, Formatlanmış: {formatted_kolonlar}")  # Debug log
+        return jsonify(formatted_kolonlar)
     except Exception as e:
         print(f"Hata: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/<tablo>/unique-values/<column>')
 def get_unique_values(tablo, column):
-    """Herhangi bir tablo için benzersiz değerleri döndürür"""
     try:
+        print(f"İstenen tablo: {tablo}, kolon: {column}")
+        
         model_map = {
             'ceza_turu': CezaTuru,
             'egitim_durumu': EgitimDurumu,
@@ -224,8 +247,50 @@ def get_unique_values(tablo, column):
         if not model:
             return jsonify({'error': 'Geçersiz tablo adı'}), 400
             
+        # Yıl kolonu için özel sorgu
+        if column == 'yil':
+            try:
+                # Direkt SQL sorgusu ile dene
+                sql_query = f"""
+                SELECT DISTINCT yil 
+                FROM {model.__tablename__}
+                WHERE yil IS NOT NULL 
+                ORDER BY yil;
+                """
+                result = db.session.execute(sql_query)
+                values = [row[0] for row in result if row[0] is not None]
+                
+                if not values:
+                    # Eğer 'yil' çalışmazsa 'yıl' ile dene
+                    sql_query = f"""
+                    SELECT DISTINCT "yıl" as yil 
+                    FROM {model.__tablename__}
+                    WHERE "yıl" IS NOT NULL 
+                    ORDER BY "yıl";
+                    """
+                    result = db.session.execute(sql_query)
+                    values = [row[0] for row in result if row[0] is not None]
+                
+                values.sort(key=lambda x: int(x) if str(x).isdigit() else x)
+                print(f"Yıl değerleri ({tablo}): {values}")
+                return jsonify(values)
+                
+            except Exception as e:
+                print(f"SQL sorgusu başarısız: {str(e)}")
+                # SQL başarısız olursa ORM ile dene
+                values = db.session.query(getattr(model, column))\
+                    .distinct()\
+                    .filter(getattr(model, column).isnot(None))\
+                    .order_by(getattr(model, column))\
+                    .all()
+                
+                unique_values = [value[0] for value in values if value[0] is not None]
+                unique_values.sort(key=lambda x: int(x) if str(x).isdigit() else x)
+                return jsonify(unique_values)
+        
+        # Diğer kolonlar için normal işlem
         if not hasattr(model, column):
-            return jsonify({'error': 'Geçersiz kolon adı'}), 400
+            return jsonify({'error': f'Geçersiz kolon adı: {column}'}), 400
             
         values = db.session.query(getattr(model, column))\
             .distinct()\
@@ -234,6 +299,9 @@ def get_unique_values(tablo, column):
             .all()
             
         unique_values = [value[0] for value in values if value[0] is not None]
+        unique_values.sort()
+        print(f"Döndürülen değerler ({column}): {unique_values}")
+        
         return jsonify(unique_values)
         
     except Exception as e:
@@ -647,12 +715,26 @@ def get_is_durumu_verileri():
 @app.route('/api/is_durumu/kolonlar')
 def get_is_durumu_kolonlari():
     """İş durumu tablosunun filtrelenebilir kolonlarını döndürür"""
-    return jsonify([
-        'suc_turu',
-        'is_durumu',
-        'cinsiyet',
-        'yil'
-    ])
+    try:
+        kolonlar = ['suc_turu', 'is_durumu', 'cinsiyet', 'il', 'yil']
+        formatted_kolonlar = []
+        for kolon in kolonlar:
+            if kolon == 'suc_turu':
+                formatted_kolonlar.append('Suç Türü')
+            elif kolon == 'is_durumu':
+                formatted_kolonlar.append('İş Durumu')
+            elif kolon == 'cinsiyet':
+                formatted_kolonlar.append('Cinsiyet')
+            elif kolon == 'il':
+                formatted_kolonlar.append('İl')
+            elif kolon == 'yil':
+                formatted_kolonlar.append('Yıl')
+        
+        print(f"İş durumu kolonları: {formatted_kolonlar}")  # Debug log
+        return jsonify(formatted_kolonlar)
+    except Exception as e:
+        print(f"Hata: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/is_durumu/unique-values/<column>')
 def get_is_durumu_unique_values(column):
@@ -660,7 +742,20 @@ def get_is_durumu_unique_values(column):
     try:
         print(f"İstenen kolon: {column}")  # Debug için
         
-        # Sorguyu basitleştirelim
+        # Özel durum: Yıl kolonu için
+        if column == 'yil':
+            values = db.session.query(IsDurumu.yil)\
+                .distinct()\
+                .filter(IsDurumu.yil.isnot(None))\
+                .order_by(IsDurumu.yil)\
+                .all()
+            
+            unique_values = [value[0] for value in values if value[0] is not None]
+            unique_values.sort(key=lambda x: int(x) if str(x).isdigit() else x)
+            print(f"Yıl değerleri: {unique_values}")
+            return jsonify(unique_values)
+        
+        # Diğer kolonlar için normal işlem
         if hasattr(IsDurumu, column):
             values = db.session.query(getattr(IsDurumu, column))\
                 .distinct()\
@@ -668,11 +763,9 @@ def get_is_durumu_unique_values(column):
                 .order_by(getattr(IsDurumu, column))\
                 .all()
             
-            print(f"Veritabanından gelen {column} değerleri:", values)
-            
-            # None olmayan değerleri liste haline getir
             unique_values = [value[0] for value in values if value[0] is not None]
-            print(f"İşlenmiş benzersiz değerler ({column}):", unique_values)
+            unique_values.sort()
+            print(f"İşlenmiş benzersiz değerler ({column}): {unique_values}")
             
             return jsonify(unique_values)
         else:
@@ -682,6 +775,237 @@ def get_is_durumu_unique_values(column):
         print(f"Hata detayı ({column}):", str(e))
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+@app.route('/veri-analizi/')
+def veri_analizi():
+    try:
+        return render_template('veri_analizi.html')
+    except Exception as e:
+        print(f"Veri analizi sayfası yüklenirken hata: {str(e)}")
+        return f"Hata: {str(e)}", 500
+
+@app.route('/api/dashboard/summary')
+def get_dashboard_summary():
+    try:
+        # Toplam kişi sayısı
+        total_people = db.session.query(func.sum(SucTuruGenel.kisi_sayisi)).scalar() or 0
+        
+        # Toplam il sayısı
+        total_cities = db.session.query(func.count(distinct(SucTuruGenel.il))).scalar() or 0
+        
+        # Yıl aralığı
+        min_year = db.session.query(func.min(SucTuruGenel.yil)).scalar() or 0
+        max_year = db.session.query(func.max(SucTuruGenel.yil)).scalar() or 0
+        
+        # Toplam suç kategorisi
+        total_categories = db.session.query(func.count(distinct(SucTuruGenel.suc_turu))).scalar() or 0
+        
+        return jsonify({
+            'total_people': int(total_people),
+            'total_cities': total_cities,
+            'min_year': min_year,
+            'max_year': max_year,
+            'total_categories': total_categories
+        })
+        
+    except Exception as e:
+        print(f"Dashboard özeti alınırken hata: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+# Diğer dashboard API endpoint'leri
+@app.route('/api/dashboard/yearly-distribution')
+def get_yearly_distribution():
+    try:
+        # Yıllara göre toplam suç sayısı
+        results = db.session.query(
+            SucTuruGenel.yil,
+            func.sum(SucTuruGenel.kisi_sayisi).label('total')
+        ).group_by(SucTuruGenel.yil)\
+         .order_by(SucTuruGenel.yil)\
+         .all()
+        
+        return jsonify({
+            'labels': [str(r.yil) for r in results],
+            'values': [int(r.total) for r in results]
+        })
+    except Exception as e:
+        print(f"Yıllık dağılım alınırken hata: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/dashboard/cities-distribution')
+def get_cities_distribution():
+    try:
+        # İllere göre toplam suç sayısı (ilk 10)
+        results = db.session.query(
+            SucTuruGenel.il,
+            func.sum(SucTuruGenel.kisi_sayisi).label('total')
+        ).group_by(SucTuruGenel.il)\
+         .order_by(func.sum(SucTuruGenel.kisi_sayisi).desc())\
+         .limit(10)\
+         .all()
+        
+        return jsonify({
+            'labels': [r.il for r in results],
+            'values': [int(r.total) for r in results]
+        })
+    except Exception as e:
+        print(f"İl dağılımı alınırken hata: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/dashboard/gender-distribution')
+def get_gender_distribution():
+    try:
+        # Cinsiyete göre toplam suç sayısı
+        results = db.session.query(
+            EgitimDurumu.cinsiyet,
+            func.sum(EgitimDurumu.kisi_sayisi).label('total')
+        ).group_by(EgitimDurumu.cinsiyet)\
+         .all()
+        
+        return jsonify({
+            'labels': [r.cinsiyet for r in results],
+            'values': [int(r.total) for r in results]
+        })
+    except Exception as e:
+        print(f"Cinsiyet dağılımı alınırken hata: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/dashboard/education-distribution')
+def get_education_distribution():
+    try:
+        # Eğitim durumuna göre toplam suç sayısı
+        results = db.session.query(
+            EgitimDurumu.egitim_durumu,
+            func.sum(EgitimDurumu.kisi_sayisi).label('total')
+        ).group_by(EgitimDurumu.egitim_durumu)\
+         .order_by(func.sum(EgitimDurumu.kisi_sayisi).desc())\
+         .all()
+        
+        return jsonify({
+            'labels': [r.egitim_durumu for r in results],
+            'values': [int(r.total) for r in results]
+        })
+    except Exception as e:
+        print(f"Eğitim durumu dağılımı alınırken hata: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/yas/unique-values/<column>')
+def get_yas_unique_values(column):
+    """Yaş tablosu için benzersiz değerleri döndürür"""
+    try:
+        print(f"Yaş tablosu için istenen kolon: {column}")  # Debug log
+        
+        if column == 'yas':
+            # Yaş değerlerini al
+            values = db.session.query(Yas.yas)\
+                .distinct()\
+                .filter(Yas.yas.isnot(None))\
+                .order_by(Yas.yas)\
+                .all()
+            
+            unique_values = [value[0] for value in values if value[0] is not None]
+            print(f"Yaş değerleri: {unique_values}")  # Debug log
+            return jsonify(unique_values)
+            
+        elif column in ['cinsiyet', 'il', 'yil']:
+            # Diğer kolonlar için
+            values = db.session.query(getattr(Yas, column))\
+                .distinct()\
+                .filter(getattr(Yas, column).isnot(None))\
+                .order_by(getattr(Yas, column))\
+                .all()
+                
+            unique_values = [value[0] for value in values if value[0] is not None]
+            print(f"{column} değerleri: {unique_values}")  # Debug log
+            return jsonify(unique_values)
+        else:
+            return jsonify({'error': f'Geçersiz kolon adı: {column}'}), 400
+            
+    except Exception as e:
+        print(f"Yaş değerleri alınırken hata: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/check-columns')
+def check_columns():
+    try:
+        sql_query = """
+        SELECT table_name, column_name 
+        FROM information_schema.columns 
+        WHERE column_name LIKE '%y_l%' 
+        OR column_name LIKE '%yil%'
+        """
+        result = db.session.execute(sql_query)
+        columns = [(row[0], row[1]) for row in result]
+        return jsonify(columns)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/grafikler')
+def grafikler():
+    return render_template('grafikler.html')
+
+@app.route('/api/<tablo>/grafik-veriler')
+def get_grafik_veriler(tablo):
+    try:
+        # Model haritası
+        model_map = {
+            'ceza_turu': CezaTuru,
+            'egitim_durumu': EgitimDurumu,
+            'il_kisi_sayisi': IlKisiSayisi,
+            'infaza_davet_sekli': InfazDavet,
+            'is_durumu': IsDurumu,
+            'medeni_durum': MedeniDurum,
+            'suc_turu_genel': SucTuruGenel,
+            'uyruk_ve_cinsiyet': UyrukCinsiyet,
+            'yas': Yas,
+            'yerlesim_yeri': YerlesimYeri
+        }
+        
+        model = model_map.get(tablo)
+        if not model:
+            return jsonify({'success': False, 'error': 'Geçersiz tablo adı'}), 400
+            
+        # Base query
+        query = db.session.query(model)
+        
+        # URL'den gelen tüm filtreleri uygula
+        for key, value in request.args.items():
+            if value and hasattr(model, key):
+                query = query.filter(getattr(model, key) == value)
+        
+        # Sonuçları al
+        results = query.all()
+        
+        # Sonuçları JSON'a dönüştür
+        data = []
+        for row in results:
+            item = {}
+            for column in row.__table__.columns:
+                value = getattr(row, column.name)
+                # Integer değerleri düzgün formatla
+                if isinstance(value, int):
+                    item[column.name] = int(value)
+                else:
+                    item[column.name] = value
+            data.append(item)
+        
+        print(f"Filtreler: {request.args}")
+        print(f"Bulunan sonuç sayısı: {len(data)}")
+        
+        return jsonify({
+            'success': True,
+            'data': data,
+            'total': len(data)
+        })
+        
+    except Exception as e:
+        print(f"Grafik verileri alınırken hata: {str(e)}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': f'Veriler getirilirken bir hata oluştu: {str(e)}'
+        }), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='127.0.0.1', port=5002) 
